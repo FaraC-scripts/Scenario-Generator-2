@@ -21,7 +21,7 @@
     Section
     Field: Entry
     Field: Entry
-    \\ empty line
+    // empty line
     Section
     Field: Entry
     Field: Entry
