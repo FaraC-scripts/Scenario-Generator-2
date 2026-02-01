@@ -21,10 +21,6 @@
     Section
     Field: Entry
     Field: Entry
-    // empty line
-    Section
-    Field: Entry
-    Field: Entry
 > Sections categorize the fields that follow them. They are in title case, have two linebreaks between them and the last field, and they are followed by fields. They cannot use colons (":").
 > Fields are the topics about which entries provide information. Fields follow sections and end with a colon.
 > Entries contain information about their field. They are all of the text after a field's colon and before the end of the line. 
@@ -57,10 +53,6 @@
 
 📋 Expected Structure
 > The outline expects three types of text arranged like this:
-    Section
-    Field: Instructions
-    Field: Instructions
-    // empty line
     Section
     Field: Instructions
     Field: Instructions
