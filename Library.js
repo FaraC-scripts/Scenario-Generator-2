@@ -7,14 +7,9 @@
  * that guides the AI into creating structured outputs that match the format
  * provided in the outline. When the outline is complete, the JSON will generate.
  * This verison asks the player to select Sexual Content and Kink Content policies.
- * 
- * For more information, check the Readme: 
- * https://github.com/FaraC-scripts/Toolbox/blob/main/README.md
  */
 
 // Default settings for intialization and repairing the Configure Generator card
-// For more information on what these do, check the Readme: 
-// https://github.com/FaraC-scripts/Scenario_Generator/blob/main/README.md
 const DEFAULT_SETTINGS = {
     general_settings: {
         description_size: 50, // The base size for fields marked as descriptive
