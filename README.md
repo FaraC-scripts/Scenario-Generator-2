@@ -20,8 +20,8 @@
 > The generator expects three types of text arranged like this:
 
     Section
-    Field: Instructions
-    Field: Instructions
+    Field: Entry
+    Field: Entry
 
     Section
     Field: Entry
