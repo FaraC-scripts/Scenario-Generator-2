@@ -18,6 +18,11 @@
 
 📋 Expected Structure
 > The generator expects three types of text arranged like this:
+
+    Section
+    Field: Instructions
+    Field: Instructions
+
     Section
     Field: Entry
     Field: Entry
@@ -53,6 +58,11 @@
 
 📋 Expected Structure
 > The outline expects three types of text arranged like this:
+
+    Section
+    Field: Instructions
+    Field: Instructions
+
     Section
     Field: Instructions
     Field: Instructions
