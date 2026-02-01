@@ -21,7 +21,7 @@
     Section
     Field: Entry
     Field: Entry
-
+    \\ empty line
     Section
     Field: Entry
     Field: Entry
@@ -60,7 +60,7 @@
     Section
     Field: Instructions
     Field: Instructions
-
+    // empty line
     Section
     Field: Instructions
     Field: Instructions
