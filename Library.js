@@ -273,44 +273,41 @@ function parseInitialInput() {
         // Turn the first input into a cleaned array of lines split by "\n"
         const lines = linesFromText(globalThis.text);
         // Initialize the return array
-        const parsedLines = [];
-        // Grab player inputs from the line we know the policy to be on
-        // and coerce it to a number with an index valid for the policy list
-        const sexPolicyIndex = Math.max(
-            Math.min(
-                parseInt(getAfterColon(lines[4])) 
-                || 0, 
-            10), 
-        0);
-        // Then match to the policy
-        const sexPolicy = SEXUAL_CONTENT_POLICIES[sexPolicyIndex];
-
-        const kinkPolicyIndex = Math.max(
-            Math.min(
-                parseInt(getAfterColon(lines[5])) 
-                || 0, 
-            10), 
-        0);
-        const kinkPolicy = KINK_CONTENT_POLICIES[kinkPolicyIndex];
-        // Kink policies start replacing "kink" with "fetish" at index 6
-        // so use the apropriate word to refer to the policy
-        const kinkOrFetish = kinkPolicyIndex <= 5 ? "Kink" : "Fetish";
-        // If the story request line has no user input, don't include that line
-        if (lines[0].trim() !== "Story Request:") parsedLines.push(lines[0]);
-        // Always include these lines
-        parsedLines.push(
-            "",
-            "Overview",
-            `Sexual Content: ${sexPolicy}`,
-            `${kinkOrFetish} Content: ${kinkPolicy}`
-        );
-        // If the tags line has no user input, don't include that line.
-        // It is moved to the end of the new array so that the AI will start by
-        // completing this field if it isn't already filled out
-        if (lines[1].trim() !== "Tags:") parsedLines.push(lines[1]);
-        // Add a final linebreak so the AI doesn't start by continuing
-        // the tag list the user input (if any)
-        parsedLines.push("")
+        const parsedLines = ["", "", "", "Overview", "", "", ""];
+        for (const l of lines) {
+            if (l.startsWith("Story Request:") && l.trim() !== "Story Request:"){
+                //If the story request is present, include it; otherwise, leave blank.
+                parsedLines[1] = l;
+            } else if (l.startsWith("Sexual Content:")){
+                // Grab player inputs from the line we know the policy to be on
+                // and coerce it to a number with an index valid for the policy list
+                const sexPolicyIndex = Math.max(
+                    Math.min(
+                        parseInt(getAfterColon(l)) 
+                        || 0, 
+                    10), 
+                0);
+                // Then match to the policy
+                const sexPolicy = SEXUAL_CONTENT_POLICIES[sexPolicyIndex];
+                parsedLines[4] = `Sexual Content: ${sexPolicy}`
+            } else if (l.startsWith("Kink Content:")) {
+                const kinkPolicyIndex = Math.max(
+                    Math.min(
+                        parseInt(getAfterColon(l)) 
+                        || 0, 
+                    10), 
+                0);
+                const kinkPolicy = KINK_CONTENT_POLICIES[kinkPolicyIndex];
+                // Kink policies start replacing "kink" with "fetish" at index 6
+                // so use the apropriate word to refer to the policy
+                const kinkOrFetish = kinkPolicyIndex <= 5 ? "Kink" : "Fetish";
+                parsedLines[5] = `${kinkOrFetish} Content: ${kinkPolicy}`      
+            } else if (l.startsWith("Tags:") && l.trim() !== "Tags:"){
+                parsedLines[6] = l;
+            };
+        };
+        if (parsedLines[6]) parsedLines.push("");
+        if (!parsedLines[1]) parsedLines.splice(0, 2)
         return parsedLines.join("\n")
     } catch (e) {
         // If this initialization fails somehow, there's no real way for the user
