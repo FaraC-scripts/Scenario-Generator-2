@@ -7,13 +7,16 @@
  * that guides the AI into creating structured outputs that match the format
  * provided in the outline. When the outline is complete, the JSON will generate.
  * This verison asks the player to select Sexual Content and Kink Content policies.
+ * 
+ * For more information, check the Readme: 
+ * https://github.com/FaraC-scripts/Scenario-Generator-2/blob/main/README.md
  */
 
 // Default settings for intialization and repairing the Configure Generator card
 const DEFAULT_SETTINGS = {
     general_settings: {
         description_size: 50, // The base size for fields marked as descriptive
-        include_story_request_in_json: false // Inlcude initial request in final output
+        include_story_request_in_json: false, // Inlcude initial request in final output
     },
     seed_word_settings: {
         add_random_seed_words: false, // Adds a special, random seed bloc to the prompt
@@ -29,36 +32,44 @@ const ABORT_OUTPUT = '\n##Ignore all prior instructions. Do not generate text. R
 
 // Manages control flow in the Input phase.
 function handleGeneratorInput() {
-    // We need to know if an input happened this turn
-    state.inputOccurred = true;
-    /** 
-     * AI dungeon's error handling is inconsistent and disruptive.
-     * So instead of trowing Errors, custom handling is implemented,
-     * and as much of the script as possible is surrounded in try/catch blocks.
-     * If an error occurs, it is added to state.errorLog.
-     * When errorLog is checked, if it contains any errors,
-     * the context is replaced with ABORT_OUTPUT to minimize delay and token cost
-     * and the player is presented with the error log on output.
-     * Errors placed in the errorLog should be simple objects with 
-     * the name and message properties.
-     */ 
-    state.errorLog = [];
-    // Settings need to be checked for updates every player action.
-    updateSettings();
-    // Adds the default outline as a story card if there isn't one already
-    // and makes sure the outline is functional
-    ensureOutline();
-    // If the player enters the word "help" into input and it isn't the initial input
-    state.isHelpRequired = globalThis.text.toLowerCase().includes("help") 
-        && info.actionCount > 0;
-    // If this is the first input, which is to say the input which occurs
-    // on scenario start-up, before the player can act,
-    // sepcial handling is required
-    globalThis.text = info.actionCount === 0
-        ? parseInitialInput()
-        : state.isHelpRequired
-            ? "> Help - Scenario Generator Help - ⛔ Erase After Reading ⛔"
-            : "\n"; //Otherwise, inputs are not allowed, overwritten with a newline.
+    try{
+        // We need to know if an input happened this turn
+        state.inputOccurred = true;
+        /** 
+         * AI dungeon's error handling is inconsistent and disruptive.
+         * So instead of trowing Errors, custom handling is implemented,
+         * and as much of the script as possible is surrounded in try/catch blocks.
+         * If an error occurs, it is added to state.errorLog.
+         * When errorLog is checked, if it contains any errors,
+         * the context is replaced with ABORT_OUTPUT to minimize delay and token cost
+         * and the player is presented with the error log on output.
+         * Errors placed in the errorLog should be simple objects with 
+         * the name and message properties.
+         */ 
+        state.errorLog = [];
+        // Settings need to be checked for updates every player action.
+        updateSettings();
+        // Adds the default outline as a story card if there isn't one already
+        // and makes sure the outline is functional
+        ensureOutline();
+        // If the player enters the word "help" into input and it isn't the initial input
+        state.isHelpRequired = globalThis.text.toLowerCase().includes("help") 
+            && info.actionCount > 0;
+        // If this is the first input, which is to say the input which occurs
+        // on scenario start-up, before the player can act,
+        // sepcial handling is required
+        globalThis.text = info.actionCount === 0
+            ? parseInitialInput()
+            : state.isHelpRequired
+                ? "> Help - Scenario Generator Help - ⛔ Erase After Reading ⛔"
+                : "\n"; //Otherwise, inputs are not allowed, overwritten with a newline.
+    } catch (e) {
+        state.errorLog.push({
+            name: "Uncaught Input Error",
+            message: "An error occurred in the input phase and was not caught by a more specific error handler. Oops :("
+        })
+        globalThis.text = ABORT_OUTPUT
+    }
 }
 
 // Manages control flow in the Context phase
@@ -67,15 +78,14 @@ function handleGeneratorContext() {
         // AI Dungeon is odd and doesn't create the stop parameter on its own,
         // and will also throw an error if one is not created.
         globalThis.stop ??= false;
+        // Make sure this defaults to false
+        state.continuation = false;
         // Special handling for delivering help text
         if (state.isHelpRequired) {
             // AI generation not required for delivering static help text
             globalThis.text = ABORT_OUTPUT
             return
         }
-        // What the player's most recent action type was.
-        // If it was continue, special handling is required.
-        const actionType = history[history.length -1].type;
         // If there wasn't an input, do some required actions here
         if (!state.inputOccurred) {
             state.errorLog = [];
@@ -89,12 +99,12 @@ function handleGeneratorContext() {
         // Stores the context as an object for later reference
         state.parsedContext = stringToObject(lines);
         // Creates an outline object from the outline story card
-        const outline = parseOutline();
+        state.outline = parseOutline();
         // Checks to see if the latest section and field used in the context
         // match the last section and field of the outline.
         // If so, generation is considered complete and JSON will be output
         // instead of AI-generated text (thus the output is aborted)
-        if (isOutlineComplete(outline)) {
+        if (isOutlineComplete()) {
             state.outputJSON = true;
             globalThis.text = ABORT_OUTPUT;
             return;
@@ -104,7 +114,7 @@ function handleGeneratorContext() {
         // AI should output based on the current position in the outline
         insertFloatingPrompt(
             lines,
-            ...generateFloatingPrompt(lines, outline)
+            ...generateFloatingPrompt(lines)
         );
         // If there are errors, abort the output
         // Otherwise send the AI the context with inserted prompt
@@ -114,10 +124,10 @@ function handleGeneratorContext() {
     } catch (e) {
         state.errorLog.push({
             name: "Uncaught Context Error",
-            message: "An error occurred in the context and was not caught by a more specific error handler. Oops :("
-        })
-        globalThis.text = ABORT_OUTPUT
-    }
+            message: "An error occurred in the context phase and was not caught by a more specific error handler. Oops :("
+        });
+        globalThis.text = ABORT_OUTPUT;
+    };
 }
 
 // Manages control flow in the Output phase
@@ -132,22 +142,22 @@ function handleGeneratorOutput() {
             // Turn this off so we don't get stuck in help mode
             state.isHelpRequired = false;
             // Deliver static help text
-            globalThis.text = HELP_TEXT
-            return
+            globalThis.text = HELP_TEXT;
+            return;
         }
         // If this flag is true, the outline is complete and it's time to
         // convert it into a JSON string for the player
         if (state.outputJSON) {
             // Make sure the flag is off so the script doesn't get stuck in JSON mode
-            state.outputJSON = false
-            globalThis.text = createFinalJSONString()
-            return
+            state.outputJSON = false;
+            globalThis.text = createFinalJSONString();
+            return;
         }
+        globalThis.text = normalizeOutput(globalThis.text)
         // If the outline wasn't complete before, but is now complete 
         // after the most recent output, special handling is required.
         if (
             isOutlineComplete(
-                parseOutline(),
                 // Context is stored in a parsed, object form, and it's easier to
                 // reassemble the context from history than reverse that process
                 // So context is reassembled with the current output added
@@ -158,23 +168,21 @@ function handleGeneratorOutput() {
             // ensuring is spacing, linebreaks, and section heading, as well as 
             // adding comments to the end of the output that inform the player
             // how to proceed
-            globalThis.text = normalizeOutput(globalThis.text) + `
+            globalThis.text += `
+            
 //The scenario prompt is complete. Feel free to edit it now.
 //When you are done, press "Continue" one more time to generate a JSON object.
 //Copy the next output (edit -> ctrl-A -> ctrl-C), return to the main scenario menu (you can usually press back in the broswer), and select "Play" to get started.
-`
-            return
-        }
-        // If this is a normal (non-terminal) output, normalize the output
-        globalThis.text = normalizeOutput(globalThis.text)
+`;
+        };
     } catch (e) {
         state.errorLog.push(
             {
                 name: "Uncaught Output Error",
-                message: "An error occurred in the output and was not caught by a more specific error handler. Oops :("
+                message: "An error occurred in the output phase and was not caught by a more specific error handler. Oops :("
             }
-        )
-        globalThis.text = handleErrors()
+        );
+        globalThis.text = handleErrors();
     }
 }
 
@@ -185,25 +193,25 @@ function snakeToTitle(snake) {
     const words = snake
         .replace(/^[0-9]|[^$\w]/g, '')
         .split('_');
-    const titleWords = []
+    const titleWords = [];
     for (let i = 0; i < words.length; i++) {
-        const word = words[i]
+        const word = words[i];
         // If the word is in the caps list, it is always set to all caps
         if (ALL_CAPS_WORDS.has(word)) {
-            titleWords.push(word.toUpperCase())
-            continue
-        }
+            titleWords.push(word.toUpperCase());
+            continue;
+        };
         // If the word is in the lower case list, and it isn't
         // the first or last word, it is kept lower case 
         if (i !== 0
             && i !== words.length - 1
             && LOWER_CASE_WORDS.has(word)
         ) {
-            titleWords.push(word)
-            continue
-        }
+            titleWords.push(word);
+            continue;
+        };
         // Otherwise it has the first letter capitalized
-        titleWords.push(word.charAt(0).toUpperCase() + word.slice(1))
+        titleWords.push(word.charAt(0).toUpperCase() + word.slice(1));
     }
 
     return titleWords.join(' ');
@@ -211,10 +219,11 @@ function snakeToTitle(snake) {
 
 // This way around is so much easier :D
 function titleToSnake(title) {
-    // Just make it all lower case and replace spaces with underscores
     return title
-        .toLowerCase()
-        .replace(/\s+/g, '_');
+        .toLowerCase() // Make it all lower case
+        .replace(/\s+/g, '_') // Replace spaces with underscore first
+        .replace(/[^a-z0-9_]/g, '') // Then remove all non-alphanumeric characters except underscores
+        .replace(/^[0-9]+/, ''); // Remove leading numbers
 }
 
 // Returns the part of a string that comes after the first colon
@@ -239,7 +248,7 @@ function contextFromHistory() {
 // Has special handling for story card entries
 function linesFromText(text, isCard) {
     // Comments and error messages get filtered out
-    const filters = ["//", "> Error"]
+    const filters = ["//", "> ⛔ Error"]
     return text
         .replace("\nRecent Story:\n", "") // AI Dungeon's header gets trimmed
         .replace(/\*+/g, "") // Asterisks get removed
@@ -312,7 +321,7 @@ function parseInitialInput() {
     } catch (e) {
         // If this initialization fails somehow, there's no real way for the user
         // to repair it, so they have to start over
-        return `> Error: Initial Input Error
+        return `> ⛔ Error: Initial Input Error
 // Something went wrong with the initial text the scenario was meant to display.
 // Unfortunately, this cannot be fixed. Apologies. Please start over in a new scenario.`
     }
@@ -688,7 +697,7 @@ function parseOutline(context = state.parsedContext) {
 // Determines whether the outline structure is complete based on the current context.
 // Compares the deepest nested property path of the outline with the current context
 // to check if the user has navigated through the entire outline structure.
-function isOutlineComplete(outline, context = state.parsedContext) {
+function isOutlineComplete(context = state.parsedContext, outline = state.outline) {
     // Get the deepest nested property path in the outline structure
     // Returns [parentPath, lastKey] where parentPath is the path to the parent object
     // and lastKey is the final property key in the nested chain
@@ -722,7 +731,7 @@ function findLastNestedProperty(obj) {
 
 // Generates a structured prompt based on an outline, current context, and state.
 // Dynamically assembles instructions, seed words, and continuation logic.
-function generateFloatingPrompt(lines, outline, context = state.parsedContext) {
+function generateFloatingPrompt(lines, outline = state.outline, context = state.parsedContext) {
     // Extract current position within the outline from the context
     let [
         section,
@@ -776,7 +785,7 @@ function generateFloatingPrompt(lines, outline, context = state.parsedContext) {
         } else {
             priorityInstructions += `
 ## Continue the entry for ${snakeToTitle(field)} exactly where it leaves off.
-## Always resume mid-sentence if the input left off mid-sentence.
+## Resume mid-sentence if the input left off mid-sentence.
 ## Do not output the field name; do not output "${snakeToTitle(field)}:"`;
             if (instructions === "...") {
                 continueInstructions = `\${Continue the entry for ${snakeToTitle(field)}, starting exactly where it leaves off.${descriptionMod !== null ? getDescriptionText(descriptionMod, entry) : ""}}\n`;
@@ -790,10 +799,7 @@ function generateFloatingPrompt(lines, outline, context = state.parsedContext) {
     if (remainingFields === 0) {
         [section, sectionIndex, fieldIndex]
             = incrementSection(outline, sectionIndex, template);
-        latestContextSection = section
-        if (!state.continuation) {
-            state.sectionHeaderRequired = section;
-        }
+        latestContextSection = section;
     }
     // Add the fields of the current section to the template prompt
     addFields(outline, section, template, fieldIndex);
@@ -819,6 +825,7 @@ function generateFloatingPrompt(lines, outline, context = state.parsedContext) {
 ${continueInstructions}${template.join("\n")}
 \`
 }`;
+    state.latestPrompt = prompt;
     return [prompt, latestContextSection];
 }
 
@@ -986,67 +993,200 @@ function findInsertionIndex(lines, section) {
 // Normalizes and formats text output for consistent display, handling formatting rules,
 // section headers, seed words, continuation logic, and field completion detection.
 function normalizeOutput(text) {
-    // Get the last text entry from history for comparison
-    const lastText = history[history.length - 1].text;
-    // Process input text through multiple formatting stages
+    // Get context from history as an array of lines and ensure it is at least 3 long to make processing more straighforward.
+    const historyLines = withMinLength(
+            linesFromText(contextFromHistory()),
+            3,
+            "",
+            true
+        );
+    // Initialize a variable to hold the line types of the last three lines of history
+    const lastThreeTypes = [];
+    // Push those line types
+    for (let i = historyLines.length - 3; i < historyLines.length; i++) {
+        lastThreeTypes.push(
+            categorizeLine(historyLines[i])
+        );
+    };
+
     const outputLines = text
         .replace(/\*/g, '') // Remove asterisks from the text
         .split("\n") // Split into individual lines
-        .filter(l => l) // Filter out empty lines
-        // Add newline before lines that don't contain colons (non-field lines)
-        .map(l => l.includes(':') ? l : "\n" + l)
-        .map(l => { // Process N/A handling
-            // If it is a field and it has N/A anywhere, the value should just be N/A
-            return l.includes("N/A") && l.includes(':')
-                ? `${l.split(':')[0]}: N/A`
-                : l
-        });
-    // Add section header if required and not in continuation mode
-    if (state.sectionHeaderRequired && !state.continuation) {
-        const sectionHeader = snakeToTitle(state.sectionHeaderRequired);
-        state.sectionHeaderRequired = false;
-        // Add header if not already present
-        if (!outputLines[0].includes(sectionHeader)) {
-            outputLines.splice(0, 0, "\n" + sectionHeader);
-        }
-    }
-    // Add seed words line if enabled in settings
-    if (
-        state.settings.seed_word_settings.add_random_seed_words 
-        && state.settings.seed_word_settings.show_seed_words
-    ){
-        const seedLine = `// Seed Words: ${state.seeds}`;
-        // Insert seed line at appropriate position based on context
-        if(state.continuation || outputLines[0].startsWith("\n")){
-            outputLines.splice(1, 0, seedLine);
-        } else {
-            outputLines.splice(0, 0, seedLine);
-        }
-    };
-    // Add leading newline if starting new output and last text didn't end with newline
-    if (!state.continuation && lastText[lastText.length -1] !== '\n') 
-        outputLines.splice(0,0,"\n");
-    // Join processed lines back into a single string
-    let output = outputLines.join("\n");
-    // Handle continuation mode formatting
-    if (state.continuation) {
-            state.continuation = false;
-            // Remove leading newlines from continuation
-            output = output.replace(/^\n+/, '');
-            // Remove leading ellipsis if present
-            if (output.startsWith("...")) output = output.substring(3);
-            // Add space between words if needed for proper concatenation
-            if (
-                ![' ', '-'].includes(lastText[lastText.length - 1])
-                && ![' ', '-', '.', ',' ].includes(output[0])
-            ) output = " " + output;
-    }
-    // Add trailing newline if the last line indicates field completion
-    if (
-        isFieldComplete(outputLines[outputLines.length - 1])
-    ) output += "\n";
+        .map(l => l.trim()) // Trim the lines
 
-    return output;
+    // Handle continuation mode formatting
+    if (state.continuation && categorizeLine(outputLines[0]) === "garbage") {
+            // Remove leading ellipsis if present
+            if (outputLines[0].startsWith("...")) 
+                outputLines[0] = outputLines[0].substring(3);
+            // Add space between words if needed for proper concatenation
+            const last = historyLines[historyLines.length -1]
+            if (
+                ![' ', '-'].includes(last[last.length - 1])
+                && ![' ', '-', '.', ',' ].includes(outputLines[0][0])
+            ) outputLines[0] = ` ${outputLines[0]}`;
+    };
+    // Get a list of the type of line of each of the lines of output,
+    // plus the last three line types of history
+    const types = lastThreeTypes.concat(
+            outputLines.map(l => categorizeLine(l))
+        );
+    // Get a list of all of the sections in the outline
+    const outlineSections = Object.keys(state.outline);
+    // and in the context
+    const contextSections = Object.keys(state.parsedContext)
+    // Initialize the return value
+    const finalLines = [];
+    // Iterate through the output types; the first three types are from history,
+    // there for reference, but not to be added back into the final output
+    for (let i = 3; i < types.length; i++) {
+        // Add seed words line if enabled in settings
+        if (
+            state.settings.seed_word_settings.add_random_seed_words 
+            && state.settings.seed_word_settings.show_seed_words
+        ){
+            if (i === 3 && !state.continuation) {
+                finalLines.push(`// Seed Words: ${state.seeds}`);
+            } else if (i === 4 && state.continuation) {
+                finalLines.push(`// Seed Words: ${state.seeds}`);
+            };
+        };
+        // If the current line is empty
+        if (types[i] === "empty"){
+            // If the previous line is empty this line should be omitted
+            if(types[i-1] === "empty"){
+                continue;
+            }
+            // Find the type of the next non-empty line
+            const nextType = nextNonemptyType(types, i);
+            // Only add empty lines if they're just before sections and aren't doubled up
+            if (nextType === "section") finalLines.push("");
+            continue;
+        };
+        // If the current line is a section, meaning a title-case string without a colon
+        if (types[i] === "section"){
+            // If this section isn't a section included in the outline, skip it
+            if (!outlineSections.includes(titleToSnake(outputLines[i-3]))) {
+                continue;
+            };
+            // If a section recurs, this line and all following must be voided.
+            if (contextSections.includes(titleToSnake(outputLines[i-3]))) {
+                break;
+            }
+            // Add padding for the section as needed
+            if (types[i-1] !== "empty") finalLines.push("");
+            if (i === 3) finalLines.push("");
+            // Add the section
+            finalLines.push(outputLines[i-3]);
+            contextSections.push(titleToSnake(outputLines[i-3]));
+            continue
+        };
+        // If the current section is a filled field, meaning a string with a first segment 
+        // that is title case and ends in a colon, followed by a second section of text.
+        // Or in the special case of a continuation
+        if (
+            types[i] === "filledfield"
+            || (
+                state.continuation
+                && i === 3
+                && types[i] === "garbage" 
+            )
+        ) {
+            // Collect garbage back into the filled field
+            let j = i;
+            while(++j < types.length && types[j] === "garbage"){
+                outputLines[i-3] += ` ${outputLines[j-3]}`;
+            };
+            // Add the filled field. Filled fields are always included in the output.
+            finalLines.push(outputLines[i-3]);
+            // Add trailing newline if this is the last line and the field is complete
+            if (
+                i === types.length - 1 
+                && isFieldComplete(outputLines[i-3])
+            ) finalLines.push("");
+            continue;
+        };
+        // There is only one circumstance when an empty field is kept:
+        // Supporting Characters, where the AI can leave it blank instead of using "N/A"
+        if (
+            types[i] === "field" 
+            && outputLines[i-3] === "Supporting Characters:"
+        ) {
+            outputLines[i-3] = "Supporting Characters: N/A";
+        };
+    };
+    // Assemble the final text
+    const finalText = finalLines.join("\n");
+    // If the final output would be empty, return an error message.
+    if (finalText === "") return `
+> ⛔ Error: The AI output did not produce text that matches what the generator expected based on its Outline story card.
+Here are the instructions the AI was given:
+---
+${state.latestPrompt}
+---
+Here is what the AI output:
+---
+${text}
+---
+How to Fix This? Try to:
+- Change some details. It may help the AI get out of a rut.
+- Undo and redo the last section
+- Remove the problematic section from the Outline story card (DO NOT remove Character Template)
+⛔ Erase After Reading ⛔
+`
+    // Join processed lines back into a single string and return it
+    return finalText;
+}
+
+function withMinLength (array, minLength, fillValue = null, padStart = false) {
+    if (array.length >= minLength) return array;
+    
+    const missingCount = minLength - array.length;
+    const filler = Array(missingCount).fill(fillValue);
+    
+    return padStart 
+        ? [...filler, ...array]  // Add missing elements to the front
+        : [...array, ...filler]; // Add missing elements to the back
+};
+
+function categorizeLine(line) {
+    if (line === '') return 'empty';
+    
+    const hasColon = line.includes(':');
+    const endsWithColon = line.endsWith(':');
+    const parts = line.split(':');
+    const beforeColon = parts[0].trim();
+    const afterColon = parts.slice(1).join(':').trim();
+    
+    // First check if we have a colon
+    if (hasColon) {
+        // Check if the part before colon is in title case
+        if (!isTitleCase(beforeColon)) return 'garbage';
+        
+        if (endsWithColon && afterColon === '') {
+            return 'field';
+        } else if (afterColon !== '') {
+            return 'filledfield';
+        }
+    } else {
+        // No colon - check if it's a section header
+        if (isTitleCase(line)) {
+            return 'section';
+        }
+    }
+    
+    return 'garbage';
+}
+
+function nextNonemptyType(types, i){
+    let nextType = null;
+    for (i; i < types.length; i++){
+        if (types[i] !== "empty") {
+            nextType = types[i];
+            break;
+        };
+    };
+    return nextType;
 }
 
 // Determine if a given line from a record is considered complete based on various criteria.
@@ -1058,7 +1198,7 @@ function isFieldComplete(line) {
         value === null // No value was found (null).
         || !isNaN(value) // The value is a number (e.g., "42" or "3.14").
         || isTitleCase(value) // The value is in Title Case (e.g., "New York").
-        || isCSV(value) // - The value is a comma-separated list of Title Case strings
+        || isCSV(value) // - The value is a comma-separated list of values
         || value.includes("N/A") // The value contains the string "N/A".
         // The value ends with a period, a period and a single quote,
         // or a period and a double quote.
@@ -1082,18 +1222,50 @@ function getValue(line) {
   return line.substring(colonIndex + 1).trim();
 }
 
-// Check if a string is a comma-separated list of Title Case strings.
-function isCSV(value) {
-    // Split the string into an array using the comma as a delimiter.
-    const values = value.split(',')
-    // If there is only one element (or none), it's not a valid CSV list for this check.
-    if (values.length <= 1) return false
-    // Check every element in the split array to ensure it is in Title Case.
-    for (const value of values) {
-        if (!isTitleCase(value)) return false
+/**
+ * Checks if a string is a valid CSV with specific conditions
+ * @param {string} str - The string to check
+ * @returns {boolean} - True if valid CSV with conditions met, false otherwise
+ */
+function isCSV(str) {
+    // Check if string contains at least one comma
+    if (!str.includes(',')) {
+        return false;
     }
-    // All elements are in Title Case, so the string is a valid CSV of Title Case terms.
-    return true
+    
+    // Split by comma and trim whitespace
+    const components = str.split(',').map(comp => comp.trim());
+    
+    // Check if all components are non-empty
+    if (components.some(comp => comp.length === 0)) {
+        return false;
+    }
+    
+    // Check if all components have consistent title case
+    const titleCaseResults = components.map(isTitleCase);
+    const allTitleCase = titleCaseResults.every(result => result === true);
+    const allNotTitleCase = titleCaseResults.every(result => result === false);
+    
+    if (!(allTitleCase || allNotTitleCase)) {
+        return false;
+    }
+    
+    // Check for length constraints if any component is > 25 characters
+    const longComponents = components.filter(comp => comp.length > 25);
+    
+    if (longComponents.length > 0) {
+        // Find min and max lengths
+        const lengths = components.map(comp => comp.length);
+        const minLength = Math.min(...lengths);
+        const maxLength = Math.max(...lengths);
+        
+        // Check if any component is more than twice as long as any other
+        if (maxLength > minLength * 2) {
+            return false;
+        }
+    }
+    
+    return true;
 }
 
 // Helper function to check if a string is in title case
@@ -1457,12 +1629,14 @@ Seed Word Settings
 - The seed words will be show on a comment line (starting with "//")
 - These lines are hidden from the AI and ecluded from the final JSON`;
 const HELP_TEXT = `🏭 Scenario Generator v2.0 Operation Manual 🏭
+For more about the scripts that make Scenario Generator v2.0 work:
+https://github.com/FaraC-scripts/Scenario-Generator-2/
 
 ⚙️ Recommended Model Settings
-> Model: DeepSeek 3.2
+> Model: DeepSeek 3.2   (Using any other model is unlikely to work well)
 > Context Length: 3000+ (Gameplay -> Story Generator -> Memory System)
-> Response Length: 200 (Gameplay -> Story Generator -> Model Settings)
-> Raw Model Output: On (Gameplay -> Testing & Feedback)
+> Response Length: 200  (Gameplay -> Story Generator -> Model Settings)
+> Raw Model Output: On  (Gameplay -> Testing & Feedback)
 
 ✅ Normal Operation
 > Scenario Generator begins by creating an Overview section based on the story request, prompts, and policies entered by the player on scenario creation.
