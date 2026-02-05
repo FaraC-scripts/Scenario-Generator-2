@@ -281,12 +281,18 @@ function parseInitialInput() {
     try{
         // Turn the first input into a cleaned array of lines split by "\n"
         const lines = linesFromText(globalThis.text);
+        const startingHelpText = `// To use the generator, just press continue/retry until you get a message starting with "The scenario prompt is complete. "
+// Feel free to edit entries as you go.
+// The prompt will require 7+ continues to complete its outline. To see the outline it is using, check the Outline story card.
+// When the prompt is complete, you will be asked to press continue one more time.
+// The final output you'll need to copy/paste should start and end with curly brackets '{', and '}'
+// For additional information, type /help in Do or Say`
         // Initialize the return array
-        const parsedLines = ["", "", "", "Overview", "", "", ""];
+        const parsedLines = [startingHelpText, "", "", "", "Overview", "", "", ""];
         for (const l of lines) {
             if (l.startsWith("Story Request:") && l.trim() !== "Story Request:"){
                 //If the story request is present, include it; otherwise, leave blank.
-                parsedLines[1] = l;
+                parsedLines[2] = l;
             } else if (l.startsWith("Sexual Content:")){
                 // Grab player inputs from the line we know the policy to be on
                 // and coerce it to a number with an index valid for the policy list
@@ -298,7 +304,7 @@ function parseInitialInput() {
                 0);
                 // Then match to the policy
                 const sexPolicy = SEXUAL_CONTENT_POLICIES[sexPolicyIndex];
-                parsedLines[4] = `Sexual Content: ${sexPolicy}`
+                parsedLines[5] = `Sexual Content: ${sexPolicy}`
             } else if (l.startsWith("Kink Content:")) {
                 const kinkPolicyIndex = Math.max(
                     Math.min(
@@ -310,13 +316,13 @@ function parseInitialInput() {
                 // Kink policies start replacing "kink" with "fetish" at index 6
                 // so use the apropriate word to refer to the policy
                 const kinkOrFetish = kinkPolicyIndex <= 5 ? "Kink" : "Fetish";
-                parsedLines[5] = `${kinkOrFetish} Content: ${kinkPolicy}`      
+                parsedLines[6] = `${kinkOrFetish} Content: ${kinkPolicy}`      
             } else if (l.startsWith("Tags:") && l.trim() !== "Tags:"){
-                parsedLines[6] = l;
+                parsedLines[7] = l;
             };
         };
-        if (parsedLines[6]) parsedLines.push("");
-        if (!parsedLines[1]) parsedLines.splice(0, 2)
+        if (parsedLines[7]) parsedLines.push("");
+        if (!parsedLines[2]) parsedLines.splice(1, 2)
         return parsedLines.join("\n")
     } catch (e) {
         // If this initialization fails somehow, there's no real way for the user
