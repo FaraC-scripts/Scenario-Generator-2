@@ -169,7 +169,7 @@ function handleGeneratorOutput() {
             // adding comments to the end of the output that inform the player
             // how to proceed
             globalThis.text += `
-            
+
 //The scenario prompt is complete. Feel free to edit it now.
 //When you are done, press "Continue" one more time to generate a JSON object.
 //Copy the next output (edit -> ctrl-A -> ctrl-C), return to the main scenario menu (you can usually press back in the broswer), and select "Play" to get started.
@@ -661,12 +661,13 @@ function parseOutline(context = state.parsedContext) {
         ) {
             // Extract protagonist and supporting characters from context
             const p = context.overview.protagonist;
-            const sc = context.overview.supporting_characters;
+            const sc = context.overview.supporting_characters || "";
             // Convert comma-separated supporting characters to snake_case format
             // This creates a list of normalized character identifiers
             const secondaryList = sc
                 .split(',')
-                .map(c => titleToSnake(c.trim()));
+                .map(c => titleToSnake(c.trim()))
+                .filter(c => c);
             // Create new outline object to store transformed structure
             const newOutline = {};
             // Process each key from the original outline
@@ -782,17 +783,19 @@ function generateFloatingPrompt(lines, outline = state.outline, context = state.
             priorityInstructions += `
 ## Begin by writing the entry for ${snakeToTitle(field)}.
 ## Do not include the field name.
-## Do not output "${snakeToTitle(field)}:"`;
+## Do not output the field name."`;
 
             if (instructions === "...") {
                 continueInstructions = `\${entry for ${snakeToTitle(field)}${descriptionMod !== null ? getDescriptionText(descriptionMod) : ""}}\n`;
+            } else {
+                continueInstructions = `\${${instructions}${descriptionMod !== null ? getDescriptionText(descriptionMod, entry) : ""}}\n`;                
             };
         // Case: The last line contains content, so we are continuing an entry mid-flow
         } else {
             priorityInstructions += `
 ## Continue the entry for ${snakeToTitle(field)} exactly where it leaves off.
 ## Resume mid-sentence if the input left off mid-sentence.
-## Do not output the field name; do not output "${snakeToTitle(field)}:"`;
+## Do not output the field name."`;
             if (instructions === "...") {
                 continueInstructions = `\${Continue the entry for ${snakeToTitle(field)}, starting exactly where it leaves off.${descriptionMod !== null ? getDescriptionText(descriptionMod, entry) : ""}}\n`;
             } else {
@@ -827,8 +830,7 @@ function generateFloatingPrompt(lines, outline = state.outline, context = state.
     // Assemble the final prompt string
     const prompt = `${seedInstructions}${priorityInstructions}
 {
-"output_template": \`
-${continueInstructions}${template.join("\n")}
+"output_template": \`${continueInstructions}${template.join("\n")}
 \`
 }`;
     state.latestPrompt = prompt;
@@ -1524,7 +1526,7 @@ Tags: Up to ten important content tags, separated by commas
 Genre: Two or three major categories that best describe the story
 Synopsis: (D+50)Outline the plot of the story. Address important characters by name.
 Protagonist: The proper name of the protagonist. No parentheticals.
-Supporting Characters:  List up to three characters mentioned in the synopsis. Names only, separated by commas. No parentheticals. If there aren't any obvious supporting characters, put 'N/A' here.
+Supporting Characters:  List one or two other important characters. Names only, separated by commas. No parentheticals. If the synopsis doesn't present any obvious supporting characters, put 'N/A' here.
 
 Character Template
 Name: ...
@@ -1684,5 +1686,31 @@ https://github.com/FaraC-scripts/Scenario-Generator-2/
 > The generator can be reconfigured through the Generator Configuration story card.
 > Settings include: Description Length, Story Request Inclusion, and several Random Seed Word settings.
 > For more information, check the Notes section of the Configuration story card.
+
+🍑 Sexual Content Policies
+> 0: "This story is absolutely chaste. It contains no sexual or suggestive content.",
+> 1: "This story is prim, and only contains lighthearted flirtation.",
+> 2: "This story is flirtatious, but doesn't go past that.",
+> 3: "This story is romantic. It contains physical and emotional intimacy, but not outright sex.",
+> 4: "This story is sensual. It emphasizes attraction and desire. Sexual tension permeates the story, but actual sex is rare.",
+> 5: "This story is passionate.  It emphasizes lust and desire. Flirtation and sexual tension build to an eventual release.",
+> 6: "This story is steamy. It centers lust and desire. Sexual tension builds quickly, leading to periodic release.",
+> 7: "This story is erotic. It centers sex and desire. Hot and heavy from the start, events escalate to an inevitable climax.",
+> 8: "This story is explicit. It centers sex, and does so gratuitously. Sex scenes are frequent, lewd, and salacious.",
+> 9: "This story is porn. It's all about the fucking. Raunchy, lustful, and libidinal sex scenes are constant and continuous.",
+> 10: "This story is hentai. It revolves around nonstop hardcore fucking. Sex scenes are the only scenes, and they are extreme, carnal, and utterly debaucherous."
+
+🔗 Kink/Fetish Content Policies
+> 0: "This story is strictly vanilla.",
+> 1: "This story is a little kinky, but keeps it to the background.",
+> 2: "This story is a somewhat kinky. It plays around with kinks a little, but doesn't make it the focus of the story.",
+> 3: "This story is kinky. It explores kinks, but doesn't make them the focus of the story.",
+> 4: "This story is pretty kinky. It explores kinks as part of the story's central focus.",
+> 5: "This story is very kinky. It dives head first into kinks, which make up core story elements.",
+> 6: "This story is somewhat fetishistic. It plays around with fetishes, but they aren't central to the story.",
+> 7: "This story is openly fetishistic. It explores fetishes as part of the story's central focus.",
+> 8: "This story is very fetishistic. It dives head first into fetishes, which make up core story elements.",
+> 9: "This story is highly fetishistic. It delves deeply and vividly into fetishes, which make up core story elements.",
+> 10: "This story is extremely fetishistic. It revolves around exhaustively, vividly, and obscenely plumbing the depths of as many fetishes as possible. The story pushes beyond all boundaries of decency and acceptability, and is considered offensive for everyone."
 
 ⛔ Erase After Reading ⛔`;
